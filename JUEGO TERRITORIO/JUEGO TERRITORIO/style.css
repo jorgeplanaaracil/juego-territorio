@@ -1,0 +1,76 @@
+body {
+  font-family: Arial;
+  text-align: center;
+  margin: 0;
+  padding: 10px;
+
+  /* 🔹 mejora móvil */
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+
+  transition: background-color 0.6s ease;
+}
+
+/* 🔹 TABLERO RESPONSIVE */
+#tablero {
+  display: grid;
+
+  /* 🔥 clave: siempre 10 columnas */
+  grid-template-columns: repeat(10, 1fr);
+
+  /* 🔥 ocupa pantalla sin romper proporción */
+  width: 95vmin;
+  height: 95vmin;
+
+  margin: 10px auto;
+  gap: 4px;
+}
+
+/* 🔹 CELDAS */
+.celda {
+  width: 100%;
+  height: 100%;
+
+  background-color: lightgray;
+
+  /* 🔥 mejora táctil */
+  touch-action: manipulation;
+
+  /* 🔥 efecto visual */
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+/* 🔹 feedback al tocar */
+.celda:active {
+  transform: scale(0.95);
+}
+
+/* 🔹 jugadores */
+.jugador1 {
+  background-color: blue;
+}
+
+.jugador2 {
+  background-color: red;
+}
+
+/* 🔹 textos */
+#turnoTexto,
+#tiempoTexto,
+#movimientosTexto,
+#azulTexto,
+#rojoTexto,
+#neutrasTexto {
+  margin: 4px;
+  font-size: 16px;
+}
+
+/* 🔹 fondo dinámico */
+body.turno-1 {
+  background-color: rgba(0, 120, 255, 0.12);
+}
+
+body.turno-2 {
+  background-color: rgba(255, 50, 50, 0.12);
+}
