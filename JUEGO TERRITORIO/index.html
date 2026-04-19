@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+
+  <!-- 🔹 IMPORTANTE PARA MÓVIL -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+  <title>Juego de territorio</title>
+
+  <!-- 🔹 PWA (lo usaremos luego) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#222222">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<h2 id="turnoTexto">Turno del Jugador 1</h2>
+<h3 id="tiempoTexto">Tiempo: 10s</h3>
+<h3 id="movimientosTexto">Movimientos restantes: 5</h3>
+
+<!-- 🔹 NUEVO: marcador -->
+<h3 id="azulTexto">Azul: 0</h3>
+<h3 id="rojoTexto">Rojo: 0</h3>
+<h3 id="neutrasTexto">Neutras: 0</h3>
+
+<h2 id="ganadorTexto"></h2>
+
+<div id="tablero"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
