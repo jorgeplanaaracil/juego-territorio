@@ -1,0 +1,10 @@
+﻿{
+  "name": "Juego de Territorio",
+  "short_name": "Territorio",
+  "description": "Juego multiplayer de territorio con Firebase",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#222222",
+  "theme_color": "#222222",
+  "icons": []
+}

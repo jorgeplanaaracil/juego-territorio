@@ -1,3 +1,4 @@
+
 const tablero = document.getElementById("tablero");
 const turnoTexto = document.getElementById("turnoTexto");
 const tiempoTexto = document.getElementById("tiempoTexto");
@@ -7,23 +8,44 @@ const azulTexto = document.getElementById("azulTexto");
 const rojoTexto = document.getElementById("rojoTexto");
 const neutrasTexto = document.getElementById("neutrasTexto");
 
+console.log("Script loaded, tablero:", tablero);
+
 const size = 10;
 
+// ---------------- ESTADO ----------------
 let grid = [];
 let turno = 1;
-
-let tiempo = 10;
 let movimientos = 5;
 
-let timer = null;
+let playerId = null;
+let gameStarted = false;
 
-// -------------------- CREAR TABLERO --------------------
+let jugadores = {};
 
+let turnStart = Date.now();
+let lastTurnSync = 0;
+
+// ---------------- PLAYER SYNC ----------------
+setInterval(() => {
+  if (window.playerId && !playerId) {
+    playerId = window.playerId;
+    console.log("✔ Player sincronizado:", playerId);
+  }
+}, 200);
+
+// ---------------- TURN CHECK ----------------
+function esMiTurno() {
+  if (!playerId) return false;
+  if (!gameStarted) return false;
+  return (playerId === "A" && turno === 1) ||
+         (playerId === "B" && turno === 2);
+}
+
+// ---------------- TABLERO ----------------
 for (let i = 0; i < size; i++) {
   grid[i] = [];
 
   for (let j = 0; j < size; j++) {
-
     grid[i][j] = 0;
 
     const celda = document.createElement("div");
@@ -31,168 +53,71 @@ for (let i = 0; i < size; i++) {
     celda.dataset.x = i;
     celda.dataset.y = j;
 
-    // bases iniciales
     if (i === 0 && j === 0) grid[i][j] = 1;
     if (i === size - 1 && j === size - 1) grid[i][j] = 2;
 
     actualizarColor(celda, i, j);
 
-    // 🔥 CAMBIO CLAVE PARA MÓVIL
     celda.addEventListener("pointerdown", (e) => {
       e.preventDefault();
 
-      const x = parseInt(celda.dataset.x);
-      const y = parseInt(celda.dataset.y);
+      if (!gameStarted) return;
+      if (!esMiTurno()) return;
 
-      // -------------------------
-      // 🔹 CASO 1: celda vacía
-      // -------------------------
-      if (grid[x][y] === 0) {
+      const x = +celda.dataset.x;
+      const y = +celda.dataset.y;
 
+      // LÓGICA DE MOVIMIENTO: EXPANSIÓN O CONQUISTA
+      if (esExpandible(x, y, turno)) {
         if (movimientos <= 0) return;
-        if (!esValida(x, y, turno)) return;
-
         grid[x][y] = turno;
-        actualizarColor(celda, x, y);
-
-        capturarCeldas(turno);
-
         movimientos--;
       }
-
-      // -------------------------
-      // 🔹 CASO 2: CONQUISTA
-      // -------------------------
-      else if (grid[x][y] !== turno) {
-
+      else if (puedeConquistar(x, y, turno)) {
         if (movimientos < 2) return;
-        if (!puedeConquistar(x, y, turno)) return;
-
-        movimientos -= 2;
-
         grid[x][y] = turno;
-        actualizarColor(celda, x, y);
-
-        capturarCeldas(turno);
+        movimientos -= 2;
+      }
+      else {
+        return;
       }
 
+      capturarCeldas(turno);
       actualizarUI();
-
-      if (movimientos === 0) {
-        cambiarTurno();
-      }
-
       comprobarFinJuego();
+
+      if (movimientos === 0) cambiarTurno();
+
+      sendGameState({
+        grid,
+        turno,
+        movimientos,
+        turnStart,
+        gameStarted
+      });
     });
 
     tablero.appendChild(celda);
   }
 }
 
-// -------------------- REGLA DE CONTIGÜIDAD --------------------
+// ---------------- EXPANSIÓN ----------------
+function esExpandible(x, y, jugador) {
+  if (grid[x][y] !== 0) return false;
 
-function esValida(x, y, jugador) {
-  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-
-  for (let [dx, dy] of dirs) {
-    const nx = x + dx;
-    const ny = y + dy;
-
-    if (nx >= 0 && ny >= 0 && nx < size && ny < size) {
-      if (grid[nx][ny] === jugador) return true;
-    }
-  }
-
-  return false;
+  return (
+    (x > 0 && grid[x - 1][y] === jugador) ||
+    (x < size - 1 && grid[x + 1][y] === jugador) ||
+    (y > 0 && grid[x][y - 1] === jugador) ||
+    (y < size - 1 && grid[x][y + 1] === jugador)
+  );
 }
 
-// -------------------- FONDO --------------------
-
-function actualizarFondoTurno() {
-  document.body.classList.remove("turno-1", "turno-2");
-  document.body.classList.add(turno === 1 ? "turno-1" : "turno-2");
-}
-
-// -------------------- CAPTURAS --------------------
-
-function capturarCeldas(jugador) {
-  let cambios = true;
-
-  while (cambios) {
-    cambios = false;
-
-    if (aplicarCapturaNM(jugador, 1, 1)) cambios = true;
-    if (aplicarCapturaNM(jugador, 2, 2)) cambios = true;
-    if (aplicarCapturaNM(jugador, 3, 3)) cambios = true;
-    if (aplicarCapturaNM(jugador, 3, 2)) cambios = true;
-  }
-
-  actualizarTableroVisual();
-}
-
-function aplicarCapturaNM(jugador, N, M) {
-  if (N < M) return false;
-
-  let total = 2 * N + M;
-  let huboCambios = false;
-
-  // vertical
-  for (let i = 0; i <= size - total; i++) {
-    for (let j = 0; j < size; j++) {
-
-      let valido = true;
-
-      for (let k = 0; k < N; k++)
-        if (grid[i + k][j] !== jugador) valido = false;
-
-      for (let k = 0; k < N; k++)
-        if (grid[i + N + M + k][j] !== jugador) valido = false;
-
-      for (let k = 0; k < M; k++)
-        if (grid[i + N + k][j] === jugador) valido = false;
-
-      if (valido) {
-        for (let k = 0; k < M; k++)
-          grid[i + N + k][j] = jugador;
-
-        huboCambios = true;
-      }
-    }
-  }
-
-  // horizontal
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j <= size - total; j++) {
-
-      let valido = true;
-
-      for (let k = 0; k < N; k++)
-        if (grid[i][j + k] !== jugador) valido = false;
-
-      for (let k = 0; k < N; k++)
-        if (grid[i][j + N + M + k] !== jugador) valido = false;
-
-      for (let k = 0; k < M; k++)
-        if (grid[i][j + N + k] === jugador) valido = false;
-
-      if (valido) {
-        for (let k = 0; k < M; k++)
-          grid[i][j + N + k] = jugador;
-
-        huboCambios = true;
-      }
-    }
-  }
-
-  return huboCambios;
-}
-
-// -------------------- CONQUISTA --------------------
-
+// ---------------- CONQUISTA ----------------
 function puedeConquistar(x, y, jugador) {
   const rival = jugador === 1 ? 2 : 1;
 
-  // ❗ SOLO se pueden conquistar casillas del rival
+  // SOLO casillas del rival
   if (grid[x][y] !== rival) return false;
 
   // contacto mínimo
@@ -202,7 +127,7 @@ function puedeConquistar(x, y, jugador) {
     (y > 0 && grid[x][y - 1] === jugador) ||
     (y < size - 1 && grid[x][y + 1] === jugador);
 
-  // bloqueo del rival (zona asegurada)
+  // zona asegurada por el rival
   let bloqueVerticalRival =
     x > 0 && x < size - 1 &&
     grid[x - 1][y] === rival &&
@@ -218,94 +143,222 @@ function puedeConquistar(x, y, jugador) {
   return tieneContacto;
 }
 
-// -------------------- VISUAL --------------------
+// ---------------- CAPTURAS ----------------
+function capturarCeldas(jugador) {
+  let cambios = true;
 
+  while (cambios) {
+    cambios = false;
+
+    for (let i = 0; i < size; i++) {
+      for (let j = 0; j < size; j++) {
+
+        // VERTICAL: patrones de tamaño N (1+1, 2+2, 3+3)
+        // Patrón: J^N E^N J^N (N amigos, N enemigos, N amigos)
+        for (let n = 1; n <= 3; n++) {
+          if (i + 3 * n <= size) {
+            let esValido = true;
+
+            // Verificar N amigos arriba
+            for (let k = 0; k < n; k++) {
+              if (grid[i + k][j] !== jugador) esValido = false;
+            }
+
+            // Verificar N casillas (enemiga o neutra) en el medio
+            for (let k = 0; k < n; k++) {
+              if (grid[i + n + k][j] === jugador) esValido = false;
+            }
+
+            // Verificar N amigos abajo
+            for (let k = 0; k < n; k++) {
+              if (grid[i + 2 * n + k][j] !== jugador) esValido = false;
+            }
+
+            if (esValido) {
+              // Capturar todos los N enemigos
+              for (let k = 0; k < n; k++) {
+                grid[i + n + k][j] = jugador;
+              }
+              cambios = true;
+            }
+          }
+        }
+
+        // HORIZONTAL: patrones de tamaño N (1+1, 2+2, 3+3)
+        // Patrón: J^N E^N J^N (N amigos, N enemigos, N amigos)
+        for (let n = 1; n <= 3; n++) {
+          if (j + 3 * n <= size) {
+            let esValido = true;
+
+            // Verificar N amigos a la izquierda
+            for (let k = 0; k < n; k++) {
+              if (grid[i][j + k] !== jugador) esValido = false;
+            }
+
+            // Verificar N casillas (enemiga o neutra) en el medio
+            for (let k = 0; k < n; k++) {
+              if (grid[i][j + n + k] === jugador) esValido = false;
+            }
+
+            // Verificar N amigos a la derecha
+            for (let k = 0; k < n; k++) {
+              if (grid[i][j + 2 * n + k] !== jugador) esValido = false;
+            }
+
+            if (esValido) {
+              // Capturar todos los N enemigos
+              for (let k = 0; k < n; k++) {
+                grid[i][j + n + k] = jugador;
+              }
+              cambios = true;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  actualizarTableroVisual();
+}
+
+// ---------------- VISUAL ----------------
 function actualizarColor(celda, x, y) {
   celda.classList.remove("jugador1", "jugador2");
+
   if (grid[x][y] === 1) celda.classList.add("jugador1");
   if (grid[x][y] === 2) celda.classList.add("jugador2");
 }
 
 function actualizarTableroVisual() {
   const celdas = document.querySelectorAll(".celda");
-  let index = 0;
 
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j < size; j++) {
-      const celda = celdas[index];
+  let i = 0;
+  for (let x = 0; x < size; x++) {
+    for (let y = 0; y < size; y++) {
+      const c = celdas[i++];
 
-      celda.classList.remove("jugador1", "jugador2");
-      if (grid[i][j] === 1) celda.classList.add("jugador1");
-      if (grid[i][j] === 2) celda.classList.add("jugador2");
+      c.classList.remove("jugador1", "jugador2");
 
-      index++;
+      if (grid[x][y] === 1) c.classList.add("jugador1");
+      if (grid[x][y] === 2) c.classList.add("jugador2");
     }
   }
 }
 
-// -------------------- UI --------------------
-
+// ---------------- UI ----------------
 function actualizarUI() {
-  turnoTexto.innerText = `Turno del Jugador ${turno}`;
-  tiempoTexto.innerText = `Tiempo: ${tiempo}s`;
-  movimientosTexto.innerText = `Movimientos restantes: ${movimientos}`;
+  turnoTexto.innerText = `Turno ${turno}`;
+  movimientosTexto.innerText = `Movimientos ${movimientos}`;
 }
 
-// -------------------- TURNOS --------------------
+// ---------------- TIMER SIN DESYNC ----------------
+setInterval(() => {
+  if (!gameStarted) return;
 
-function iniciarTurno() {
-  clearInterval(timer);
+  const DUR = 10;
+  const now = Date.now();
 
-  tiempo = 10;
-  movimientos = 5;
+  const elapsed = Math.floor((now - turnStart) / 1000);
+  const remaining = Math.max(0, DUR - elapsed);
 
-  actualizarFondoTurno();
-  actualizarUI();
+  tiempoTexto.innerText = `Tiempo: ${remaining}s`;
 
-  timer = setInterval(() => {
-    tiempo--;
-    actualizarUI();
+  if (remaining <= 0 && now - lastTurnSync > 1500) {
+    lastTurnSync = now;
+    cambiarTurno();
+  }
+}, 200);
 
-    if (tiempo <= 0) cambiarTurno();
-  }, 1000);
-}
-
+// ---------------- TURNOS ----------------
 function cambiarTurno() {
-  clearInterval(timer);
+  if (!gameStarted) return;
+
+  if (Object.keys(jugadores).length < 2) return;
+  if (!gameStarted) return;
+
   turno = turno === 1 ? 2 : 1;
-  iniciarTurno();
+  movimientos = 5;
+  turnStart = Date.now();
+
+  sendGameState({
+    grid,
+    turno,
+    movimientos,
+    turnStart,
+    gameStarted
+  });
+
+  actualizarUI();
 }
 
-// -------------------- FIN --------------------
-
+// ---------------- FIN ----------------
 function comprobarFinJuego() {
-  let total = 0;
-  let p1 = 0;
-  let p2 = 0;
+  let total = 0, p1 = 0, p2 = 0;
 
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j < size; j++) {
-      if (grid[i][j] !== 0) total++;
-      if (grid[i][j] === 1) p1++;
-      if (grid[i][j] === 2) p2++;
+  for (let x = 0; x < size; x++) {
+    for (let y = 0; y < size; y++) {
+      if (grid[x][y]) total++;
+      if (grid[x][y] === 1) p1++;
+      if (grid[x][y] === 2) p2++;
     }
   }
-
-  let neutras = size * size - total;
 
   azulTexto.innerText = `Azul: ${p1}`;
   rojoTexto.innerText = `Rojo: ${p2}`;
-  neutrasTexto.innerText = `Neutras: ${neutras}`;
-
-  if (total === size * size) {
-    clearInterval(timer);
-
-    if (p1 > p2) ganadorTexto.innerText = "Gana Jugador 1 🔵";
-    else if (p2 > p1) ganadorTexto.innerText = "Gana Jugador 2 🔴";
-    else ganadorTexto.innerText = "Empate ⚖️";
-  }
+  neutrasTexto.innerText = `Neutras: ${size*size - total}`;
 }
 
-// -------------------- INICIO --------------------
+// ---------------- FIREBASE SYNC ----------------
+window.renderGame = function(data) {
+  if (!data) return;
 
-iniciarTurno();
+  if (data.grid) grid = structuredClone(data.grid);
+  if (typeof data.turno === "number") turno = data.turno;
+  if (typeof data.movimientos === "number") movimientos = data.movimientos;
+
+  if (data.turnStart) {
+    turnStart = data.turnStart;
+  }
+
+  gameStarted = data.gameStarted ?? false;
+
+  if (data.jugadores) jugadores = data.jugadores;
+
+  actualizarTableroVisual();
+  actualizarUI();
+
+  // ---- MANEJO DEL BOTÓN "INICIAR PARTIDA" ----
+  const btnIniciar = document.getElementById("btnIniciar");
+  const statusTexto = document.getElementById("statusTexto");
+
+  if (playerId === "A") {
+    const numJugadores = Object.keys(jugadores).length;
+
+    if (gameStarted) {
+      // Partida iniciada: ocultar botón
+      btnIniciar.style.display = "none";
+      statusTexto.innerText = "Partida iniciada";
+    } else if (numJugadores < 2) {
+      // Esperando otro jugador: mostrar botón deshabilitado
+      btnIniciar.style.display = "block";
+      btnIniciar.disabled = true;
+      btnIniciar.innerText = "Esperando otro jugador...";
+      statusTexto.innerText = "⏳ Esperando a Jugador B...";
+    } else {
+      // Listo para iniciar: mostrar botón habilitado
+      btnIniciar.style.display = "block";
+      btnIniciar.disabled = false;
+      btnIniciar.innerText = "Iniciar Partida";
+      statusTexto.innerText = "✓ Listo para jugar";
+    }
+  } else if (playerId === "B") {
+    // Jugador B
+    if (gameStarted) {
+      btnIniciar.style.display = "none";
+      statusTexto.innerText = "Partida iniciada";
+    } else {
+      btnIniciar.style.display = "none";
+      statusTexto.innerText = "⏳ Esperando a que Jugador A inicie...";
+    }
+  }
+};

@@ -3,12 +3,10 @@
 <head>
   <meta charset="UTF-8">
 
-  <!-- 🔹 IMPORTANTE PARA MÓVIL -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
   <title>Juego de territorio</title>
 
-  <!-- 🔹 PWA (lo usaremos luego) -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#222222">
 
@@ -17,11 +15,21 @@
 
 <body>
 
+<!-- 🔹 SALA MULTIJUGADOR -->
+<div style="margin-bottom:10px;">
+  <input id="roomInput" placeholder="Código sala (1234)" maxlength="4">
+  <button id="joinBtn">Unirse / Crear</button>
+
+  <h3 id="roomTexto">Sala: -</h3>
+  <h3 id="playerTexto">Jugador: -</h3>
+  <h3 id="statusTexto" style="color: #888;">-</h3>
+  <button id="btnIniciar" style="display: none; padding: 10px 20px; font-size: 16px; cursor: pointer;">Iniciar Partida</button>
+</div>
+
 <h2 id="turnoTexto">Turno del Jugador 1</h2>
 <h3 id="tiempoTexto">Tiempo: 10s</h3>
 <h3 id="movimientosTexto">Movimientos restantes: 5</h3>
 
-<!-- 🔹 NUEVO: marcador -->
 <h3 id="azulTexto">Azul: 0</h3>
 <h3 id="rojoTexto">Rojo: 0</h3>
 <h3 id="neutrasTexto">Neutras: 0</h3>
@@ -30,6 +38,144 @@
 
 <div id="tablero"></div>
 
+<!-- 🔥 FIREBASE -->
+<script type="module">
+  import {
+    initializeApp
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+  import {
+    getDatabase,
+    ref,
+    set,
+    onValue,
+    update,
+    get
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    // 🔑 CONFIG FIREBASE
+    const firebaseConfig = {
+    apiKey: "AIzaSyD7j4yB8fzPQKMUZc-fv0D-btiFTlhr8WI",
+    authDomain: "juego-territorio-d71a5.firebaseapp.com",
+    databaseURL: "https://juego-territorio-d71a5-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "juego-territorio-d71a5",
+    storageBucket: "juego-territorio-d71a5.firebasestorage.app",
+    messagingSenderId: "334538740328",
+    appId: "1:334538740328:web:d688ece7b676682bb721dd"
+    };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  let roomCode = null;
+  let playerId = null;
+
+  const roomTexto = document.getElementById("roomTexto");
+  const playerTexto = document.getElementById("playerTexto");
+
+  // -------------------- JOIN ROOM --------------------
+  async function joinRoom(code) {
+    roomCode = code;
+
+    const roomRef = ref(db, "rooms/" + code);
+
+    // 🔥 escuchar cambios en tiempo real
+    onValue(roomRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        window.renderGame(data);
+      }
+    });
+
+    // 🔥 leer sala correctamente
+    const snap = await get(roomRef);
+    const data = snap.exists() ? snap.val() : null;
+
+    if (!data) {
+      playerId = "A";
+
+      await set(roomRef, {
+        grid: crearGridInicial(),
+        turno: 1,
+        movimientos: 5,
+        turnStart: Date.now(),
+        gameStarted: false,
+        jugadores: { A: true }
+      });
+
+    } else {
+      playerId = "B";
+
+      await update(roomRef, {
+        "jugadores/B": true
+      });
+    }
+
+    window.playerId = playerId;
+
+    console.log("🔥 playerId asignado:", playerId);
+    console.log("📡 joinRoom completado:", playerId);
+
+    roomTexto.innerText = "Sala: " + code;
+    playerTexto.innerText = "Jugador: " + playerId;
+  }
+
+  // -------------------- GRID --------------------
+  function crearGrid() {
+    return Array(10).fill().map(() => Array(10).fill(0));
+  }
+
+  function crearGridInicial() {
+    const grid = Array(10).fill().map(() => Array(10).fill(0));
+    grid[0][0] = 1;      // Jugador A (Azul) en esquina superior izquierda
+    grid[9][9] = 2;      // Jugador B (Rojo) en esquina inferior derecha
+    return grid;
+  }
+
+  // -------------------- ENVIAR ESTADO --------------------
+  window.sendGameState = function(state) {
+    if (!roomCode) return;
+    update(ref(db, "rooms/" + roomCode), state);
+  };
+
+  // -------------------- INICIAR PARTIDA --------------------
+  window.iniciarPartida = function() {
+    if (playerId !== "A") {
+      alert("Solo el Jugador A puede iniciar la partida");
+      return;
+    }
+
+    if (!roomCode) {
+      alert("Error: no estás conectado a una sala");
+      return;
+    }
+
+    update(ref(db, "rooms/" + roomCode), {
+      gameStarted: true,
+      turnStart: Date.now()
+    });
+  };
+
+  // -------------------- BOTONES --------------------
+  document.getElementById("joinBtn").addEventListener("click", () => {
+    const code = document.getElementById("roomInput").value;
+
+    if (code.length !== 4) {
+      alert("Código de 4 dígitos");
+      return;
+    }
+
+    joinRoom(code);
+  });
+
+  document.getElementById("btnIniciar").addEventListener("click", () => {
+    window.iniciarPartida();
+  });
+
+</script>
+
+<!-- 🔹 JUEGO -->
 <script src="script.js"></script>
+
 </body>
 </html>
