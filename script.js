@@ -114,6 +114,36 @@ function esExpandible(x, y, jugador) {
 }
 
 // ---------------- CONQUISTA ----------------
+function esProtegida(x, y, jugador) {
+  // Esquinas: NUNCA se pueden conquistar
+  if ((x === 0 || x === size - 1) && (y === 0 || y === size - 1)) {
+    return true;
+  }
+
+  const esInterior = x > 0 && x < size - 1 && y > 0 && y < size - 1;
+
+  if (esInterior) {
+    // Interior: protegida si tiene 2 en línea del mismo jugador (arriba-abajo o izquierda-derecha)
+    let bloqueVertical = grid[x - 1][y] === jugador && grid[x + 1][y] === jugador;
+    let bloqueHorizontal = grid[x][y - 1] === jugador && grid[x][y + 1] === jugador;
+    return bloqueVertical || bloqueHorizontal;
+  } else {
+    // Borde (no esquina): protegida si tiene 2+ de sus vecinos del mismo jugador
+    const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+    let aliados = 0;
+
+    for (const [dx, dy] of dirs) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
+        if (grid[nx][ny] === jugador) aliados++;
+      }
+    }
+
+    return aliados >= 2;
+  }
+}
+
 function puedeConquistar(x, y, jugador) {
   const rival = jugador === 1 ? 2 : 1;
 
@@ -127,20 +157,12 @@ function puedeConquistar(x, y, jugador) {
     (y > 0 && grid[x][y - 1] === jugador) ||
     (y < size - 1 && grid[x][y + 1] === jugador);
 
-  // zona asegurada por el rival
-  let bloqueVerticalRival =
-    x > 0 && x < size - 1 &&
-    grid[x - 1][y] === rival &&
-    grid[x + 1][y] === rival;
+  if (!tieneContacto) return false;
 
-  let bloqueHorizontalRival =
-    y > 0 && y < size - 1 &&
-    grid[x][y - 1] === rival &&
-    grid[x][y + 1] === rival;
+  // Verificar si está protegida
+  if (esProtegida(x, y, rival)) return false;
 
-  if (bloqueVerticalRival || bloqueHorizontalRival) return false;
-
-  return tieneContacto;
+  return true;
 }
 
 // ---------------- CAPTURAS ----------------
