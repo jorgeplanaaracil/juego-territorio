@@ -35,10 +35,12 @@ setInterval(() => {
 
 // ---------------- TURN CHECK ----------------
 function esMiTurno() {
-  if (!playerId) return false;
+  if (!window.playerId) return false;
   if (!gameStarted) return false;
-  return (playerId === "A" && turno === 1) ||
-         (playerId === "B" && turno === 2);
+  const isMyTurn = (window.playerId === "A" && turno === 1) ||
+         (window.playerId === "B" && turno === 2);
+  console.log("🎮 esMiTurno:", isMyTurn, "playerId:", window.playerId, "turno:", turno);
+  return isMyTurn;
 }
 
 // ---------------- TABLERO ----------------
@@ -61,8 +63,16 @@ for (let i = 0; i < size; i++) {
     celda.addEventListener("pointerdown", (e) => {
       e.preventDefault();
 
-      if (!gameStarted) return;
-      if (!esMiTurno()) return;
+      console.log("🖱️ Click en celda:", +celda.dataset.x, +celda.dataset.y, "gameStarted:", gameStarted);
+
+      if (!gameStarted) {
+        console.log("❌ Juego no iniciado");
+        return;
+      }
+      if (!esMiTurno()) {
+        console.log("❌ No es tu turno");
+        return;
+      }
 
       const x = +celda.dataset.x;
       const y = +celda.dataset.y;
@@ -83,6 +93,7 @@ for (let i = 0; i < size; i++) {
       }
 
       capturarCeldas(turno);
+      capturarZonasEncerradas();
       actualizarUI();
       comprobarFinJuego();
 
@@ -243,6 +254,103 @@ function capturarCeldas(jugador) {
   actualizarTableroVisual();
 }
 
+// ---------------- ZONAS ENCERRADAS ----------------
+function esInexpugnable(x, y, jugador) {
+  // Esquinas: siempre inexpugnables
+  if ((x === 0 || x === size - 1) && (y === 0 || y === size - 1)) {
+    return true;
+  }
+
+  const esInterior = x > 0 && x < size - 1 && y > 0 && y < size - 1;
+
+  if (esInterior) {
+    // Interior: inexpugnable si tiene 2 aliados en línea (arriba-abajo o izquierda-derecha)
+    let bloqueVertical = grid[x - 1][y] === jugador && grid[x + 1][y] === jugador;
+    let bloqueHorizontal = grid[x][y - 1] === jugador && grid[x][y + 1] === jugador;
+    return bloqueVertical || bloqueHorizontal;
+  } else {
+    // Borde (no esquina): inexpugnable si tiene 2+ aliados de sus vecinos
+    const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+    let aliados = 0;
+
+    for (const [dx, dy] of dirs) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
+        if (grid[nx][ny] === jugador) aliados++;
+      }
+    }
+
+    return aliados >= 2;
+  }
+}
+
+function capturarZonasEncerradas() {
+  const visitadas = Array(size).fill().map(() => Array(size).fill(false));
+
+  for (let i = 0; i < size; i++) {
+    for (let j = 0; j < size; j++) {
+      // Solo buscar en celdas neutras sin visitar
+      if (grid[i][j] === 0 && !visitadas[i][j]) {
+        // Hacer flood fill para encontrar la zona
+        const zona = [];
+        const borde = new Set(); // Casillas del borde que rodean la zona
+        const jugadoresAdyacentes = new Set();
+        const cola = [[i, j]];
+        visitadas[i][j] = true;
+
+        while (cola.length > 0) {
+          const [x, y] = cola.shift();
+          zona.push([x, y]);
+
+          // Revisar los 4 vecinos
+          const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+          for (const [dx, dy] of dirs) {
+            const nx = x + dx;
+            const ny = y + dy;
+
+            if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
+              if (grid[nx][ny] === 0 && !visitadas[nx][ny]) {
+                // Es una celda neutra sin visitar, agregamos a la cola
+                visitadas[nx][ny] = true;
+                cola.push([nx, ny]);
+              } else if (grid[nx][ny] !== 0) {
+                // Es una celda de jugador, registramos qué jugador la rodea
+                jugadoresAdyacentes.add(grid[nx][ny]);
+                borde.add(`${nx},${ny}`); // Guardamos coordenadas como string
+              }
+            }
+          }
+        }
+
+        // Si la zona está rodeada por un SOLO jugador
+        if (jugadoresAdyacentes.size === 1) {
+          const propietario = Array.from(jugadoresAdyacentes)[0];
+
+          // Verificar que TODAS las casillas del borde sean inexpugnables
+          let todasInexpugnables = true;
+          for (const coordStr of borde) {
+            const [bx, by] = coordStr.split(",").map(Number);
+            if (!esInexpugnable(bx, by, propietario)) {
+              todasInexpugnables = false;
+              break;
+            }
+          }
+
+          // Solo asignar si todos los bordes son inexpugnables
+          if (todasInexpugnables) {
+            for (const [x, y] of zona) {
+              grid[x][y] = propietario;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  actualizarTableroVisual();
+}
+
 // ---------------- VISUAL ----------------
 function actualizarColor(celda, x, y) {
   celda.classList.remove("jugador1", "jugador2");
@@ -271,6 +379,13 @@ function actualizarTableroVisual() {
 function actualizarUI() {
   turnoTexto.innerText = `Turno ${turno}`;
   movimientosTexto.innerText = `Movimientos ${movimientos}`;
+  
+  // Actualizar color de fondo según turno (solo si el juego ha comenzado)
+  if (gameStarted) {
+    document.body.className = turno === 1 ? "turno-1" : "turno-2";
+  } else {
+    document.body.className = "";
+  }
 }
 
 // ---------------- TIMER SIN DESYNC ----------------
@@ -313,6 +428,45 @@ function cambiarTurno() {
   actualizarUI();
 }
 
+// ---------------- REINICIO DE PARTIDA ----------------
+function reiniciarPartida() {
+  if (window.playerId !== "A") {
+    console.log("❌ Solo el Jugador A puede reiniciar la partida");
+    return;
+  }
+
+  // Resetear estado
+  grid = [];
+  turno = 1;
+  movimientos = 5;
+  gameStarted = false;
+  ganadorTexto.innerText = "";
+
+  // Reinicializar grid
+  for (let i = 0; i < size; i++) {
+    grid[i] = [];
+    for (let j = 0; j < size; j++) {
+      grid[i][j] = 0;
+      if (i === 0 && j === 0) grid[i][j] = 1;
+      if (i === size - 1 && j === size - 1) grid[i][j] = 2;
+    }
+  }
+
+  actualizarTableroVisual();
+  actualizarUI();
+
+  // Enviar estado resetado a Firebase
+  sendGameState({
+    grid,
+    turno,
+    movimientos,
+    turnStart: Date.now(),
+    gameStarted: false
+  });
+
+  console.log("🔄 Partida reiniciada por Jugador A");
+}
+
 // ---------------- FIN ----------------
 function comprobarFinJuego() {
   let total = 0, p1 = 0, p2 = 0;
@@ -328,11 +482,32 @@ function comprobarFinJuego() {
   azulTexto.innerText = `Azul: ${p1}`;
   rojoTexto.innerText = `Rojo: ${p2}`;
   neutrasTexto.innerText = `Neutras: ${size*size - total}`;
+
+  // Verificar si el tablero está lleno
+  if (total === size * size) {
+    // Determinar ganador
+    if (p1 > p2) {
+      ganadorTexto.innerText = "🎉 ¡Gana Azul (Jugador A)!";
+    } else if (p2 > p1) {
+      ganadorTexto.innerText = "🎉 ¡Gana Rojo (Jugador B)!";
+    } else {
+      ganadorTexto.innerText = "🤝 ¡Empate!";
+    }
+
+    // Detener el juego
+    gameStarted = false;
+
+    // Mostrar botón de reinicio
+    const btnReiniciar = document.getElementById("btnReiniciar");
+    if (btnReiniciar) btnReiniciar.style.display = "block";
+  }
 }
 
 // ---------------- FIREBASE SYNC ----------------
 window.renderGame = function(data) {
   if (!data) return;
+
+  console.log("📡 renderGame recibido - gameStarted:", data.gameStarted);
 
   if (data.grid) grid = structuredClone(data.grid);
   if (typeof data.turno === "number") turno = data.turno;
@@ -349,31 +524,45 @@ window.renderGame = function(data) {
   actualizarTableroVisual();
   actualizarUI();
 
-  // ---- MANEJO DEL BOTÓN "INICIAR PARTIDA" ----
+// ---- MANEJO DEL BOTÓN "INICIAR PARTIDA" ----
   const btnIniciar = document.getElementById("btnIniciar");
+  const btnReiniciar = document.getElementById("btnReiniciar");
   const statusTexto = document.getElementById("statusTexto");
 
-  if (playerId === "A") {
+  console.log("🔥 renderGame - playerId:", window.playerId, "jugadores:", Object.keys(jugadores));
+
+  // Si la partida comienza, ocultar botón de reinicio y limpiar ganador
+  if (gameStarted) {
+    if (btnReiniciar) btnReiniciar.style.display = "none";
+    ganadorTexto.innerText = "";
+  }
+
+  if (window.playerId === "A") {
     const numJugadores = Object.keys(jugadores).length;
 
+    console.log("🎮 Jugador A - Jugadores en sala:", Object.keys(jugadores), "Total:", numJugadores);
+
     if (gameStarted) {
-      // Partida iniciada: ocultar botón
+      // Partida iniciada: ocultar botón de iniciar, mostrar botón de reinicio
       btnIniciar.style.display = "none";
       statusTexto.innerText = "Partida iniciada";
+      if (btnReiniciar) btnReiniciar.style.display = "block";
     } else if (numJugadores < 2) {
       // Esperando otro jugador: mostrar botón deshabilitado
       btnIniciar.style.display = "block";
       btnIniciar.disabled = true;
       btnIniciar.innerText = "Esperando otro jugador...";
       statusTexto.innerText = "⏳ Esperando a Jugador B...";
+      if (btnReiniciar) btnReiniciar.style.display = "none";
     } else {
       // Listo para iniciar: mostrar botón habilitado
       btnIniciar.style.display = "block";
       btnIniciar.disabled = false;
       btnIniciar.innerText = "Iniciar Partida";
       statusTexto.innerText = "✓ Listo para jugar";
+      if (btnReiniciar) btnReiniciar.style.display = "none";
     }
-  } else if (playerId === "B") {
+  } else if (window.playerId === "B") {
     // Jugador B
     if (gameStarted) {
       btnIniciar.style.display = "none";
@@ -381,6 +570,15 @@ window.renderGame = function(data) {
     } else {
       btnIniciar.style.display = "none";
       statusTexto.innerText = "⏳ Esperando a que Jugador A inicie...";
+      if (btnReiniciar) btnReiniciar.style.display = "none";
     }
   }
 };
+
+// ---- EVENT LISTENERS ----
+document.addEventListener("DOMContentLoaded", () => {
+  const btnReiniciar = document.getElementById("btnReiniciar");
+  if (btnReiniciar) {
+    btnReiniciar.addEventListener("click", reiniciarPartida);
+  }
+});

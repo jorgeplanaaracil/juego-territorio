@@ -36,6 +36,8 @@
 
 <h2 id="ganadorTexto"></h2>
 
+<button id="btnReiniciar" style="display: none; padding: 10px 20px; font-size: 16px; cursor: pointer; margin-top: 10px;">Reiniciar Partida</button>
+
 <div id="tablero"></div>
 
 <!-- 🔥 FIREBASE -->
@@ -106,8 +108,13 @@
     } else {
       playerId = "B";
 
+      // Obtener jugadores actuales y agregar B
+      const currentData = snap.val();
+      const jugadoresActuales = currentData.jugadores || {};
+      jugadoresActuales.B = true;
+
       await update(roomRef, {
-        "jugadores/B": true
+        jugadores: jugadoresActuales
       });
     }
 
@@ -140,6 +147,8 @@
 
   // -------------------- INICIAR PARTIDA --------------------
   window.iniciarPartida = function() {
+    console.log("🎮 iniciarPartida llamado - playerId:", playerId, "roomCode:", roomCode);
+
     if (playerId !== "A") {
       alert("Solo el Jugador A puede iniciar la partida");
       return;
@@ -150,9 +159,32 @@
       return;
     }
 
+    console.log("✅ Actualizando gameStarted a true en Firebase...");
     update(ref(db, "rooms/" + roomCode), {
       gameStarted: true,
       turnStart: Date.now()
+    });
+  };
+
+  // -------------------- REINICIAR PARTIDA --------------------
+  window.reiniciarPartida = function() {
+    if (playerId !== "A") {
+      alert("Solo el Jugador A puede reiniciar");
+      return;
+    }
+
+    if (!roomCode) {
+      alert("Error: no estás conectado a una sala");
+      return;
+    }
+
+    update(ref(db, "rooms/" + roomCode), {
+      grid: crearGridInicial(),
+      turno: 1,
+      movimientos: 5,
+      turnStart: Date.now(),
+      gameStarted: false,
+      jugadores: { A: true, B: true }
     });
   };
 
@@ -170,6 +202,10 @@
 
   document.getElementById("btnIniciar").addEventListener("click", () => {
     window.iniciarPartida();
+  });
+
+  document.getElementById("btnReiniciar").addEventListener("click", () => {
+    window.reiniciarPartida();
   });
 
 </script>
